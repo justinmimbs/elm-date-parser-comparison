@@ -7,7 +7,7 @@ module DateParsers
         )
 
 import Char
-import Parser exposing ((|.), (|=), Count(Exactly), Parser, andThen, delayedCommitMap, end, fail, ignore, keyword, map, oneOf, source, succeed, symbol)
+import Parser exposing ((|.), (|=), Count(Exactly), Parser, delayedCommitMap, end, ignore, keyword, map, oneOf, source, succeed, symbol)
 import Regex exposing (Regex)
 
 
@@ -104,11 +104,12 @@ parseDate =
             [ succeed identity
                 |. symbol "-"
                 |= oneOf
-                    [ try <|
-                        succeed MonthDate
-                            |= intFixed 2
+                    [ delayedCommitMap MonthDate
+                        (intFixed 2)
+                        (succeed identity
                             |. symbol "-"
                             |= intFixed 2
+                        )
                     , try <|
                         map OrdinalDate
                             (intFixed 3)
@@ -153,16 +154,8 @@ try p =
 
 intFixed : Int -> Parser Int
 intFixed width =
-    ignore (Exactly width) Char.isDigit
-        |> source
-        |> andThen (String.toInt >> resultToParser)
-
-
-resultToParser : Result String a -> Parser a
-resultToParser result =
-    case result of
-        Ok x ->
-            succeed x
-
-        Err message ->
-            fail message
+    map
+        (String.toInt >> Result.withDefault 0)
+        (ignore (Exactly width) Char.isDigit
+            |> source
+        )

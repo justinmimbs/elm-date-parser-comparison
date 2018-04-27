@@ -45,7 +45,7 @@ suite =
             ]
     in
     Benchmark.compare "fromIsoString"
-        "Regex"
-        (\() -> input |> List.map DateParsers.fromIsoString_Regex)
         "Parser"
         (\() -> input |> List.map DateParsers.fromIsoString_Parser)
+        "Regex"
+        (\() -> input |> List.map DateParsers.fromIsoString_Regex)
