@@ -7,7 +7,7 @@ module DateParsers
         )
 
 import Char
-import Parser exposing ((|.), (|=), Count(Exactly), Parser, delayedCommitMap, end, ignore, keyword, map, oneOf, source, succeed, symbol)
+import Parser exposing ((|.), (|=), Parser)
 import Regex exposing (Regex)
 
 
@@ -27,7 +27,7 @@ type YearDate
 
 fromIsoString_Regex : String -> Result String Date
 fromIsoString_Regex =
-    Regex.find (Regex.AtMost 1) isoDateRegex
+    Regex.find isoDateRegex
         >> List.head
         >> Result.fromMaybe "String is not in IS0 8601 date format"
         >> Result.andThen (.submatches >> fromIsoStringMatches)
@@ -56,7 +56,9 @@ isoDateRegex =
             --     8
             "\\-?(\\d{3})"
     in
-    Regex.regex <| "^" ++ year ++ "(?:" ++ cal ++ "|" ++ week ++ "|" ++ ord ++ ")?$"
+    ("^" ++ year ++ "(?:" ++ cal ++ "|" ++ week ++ "|" ++ ord ++ ")?$")
+        |> Regex.fromString
+        |> Maybe.withDefault Regex.never
 
 
 fromIsoStringMatches : List (Maybe String) -> Result String Date
@@ -64,14 +66,14 @@ fromIsoStringMatches =
     let
         toInt : Maybe String -> Int
         toInt =
-            Maybe.andThen (String.toInt >> Result.toMaybe) >> Maybe.withDefault 1
+            Maybe.andThen String.toInt >> Maybe.withDefault 1
     in
     \matches ->
         case matches of
             [ Just yyyy, _, mn, d, _, wn, wdn, od ] ->
                 Ok <|
                     Year
-                        (yyyy |> String.toInt |> Result.withDefault 1)
+                        (yyyy |> String.toInt |> Maybe.withDefault 1)
                         (case ( mn, wn ) of
                             ( Just _, Nothing ) ->
                                 MonthDate (mn |> toInt) (d |> toInt)
@@ -92,70 +94,78 @@ fromIsoStringMatches =
 
 
 fromIsoString_Parser : String -> Result String Date
-fromIsoString_Parser =
-    Parser.run (parseDate |. end) >> Result.mapError (always "String is not in IS0 8601 date format")
+fromIsoString_Parser string =
+    Parser.run date string |> Result.mapError (\_ -> "String is not in IS0 8601 date format")
 
 
-parseDate : Parser Date
-parseDate =
-    succeed Year
-        |= intFixed 4
-        |= oneOf
-            [ succeed identity
-                |. symbol "-"
-                |= oneOf
-                    [ delayedCommitMap MonthDate
-                        (intFixed 2)
-                        (succeed identity
-                            |. symbol "-"
-                            |= intFixed 2
-                        )
-                    , try <|
-                        map OrdinalDate
-                            (intFixed 3)
-                    , succeed MonthDate
-                        |= intFixed 2
-                        |= succeed 1
-                    , succeed WeekDate
-                        |. keyword "W"
-                        |= intFixed 2
-                        |= oneOf
-                            [ succeed identity
-                                |. symbol "-"
-                                |= intFixed 1
-                            , succeed 1
-                            ]
+date =
+    Parser.succeed Year
+        |= int4
+        |= yearDate
+        |. Parser.end
+
+
+yearDate : Parser YearDate
+yearDate =
+    Parser.oneOf
+        [ Parser.succeed identity
+            |. Parser.token "-"
+            |= Parser.oneOf
+                [ Parser.backtrackable
+                    (Parser.map OrdinalDate
+                        int3
+                        |> Parser.andThen Parser.commit
+                    )
+                , Parser.succeed MonthDate
+                    |= int2
+                    |= Parser.oneOf
+                        [ Parser.succeed identity
+                            |. Parser.token "-"
+                            |= int2
+                        , Parser.succeed 1
+                        ]
+                ]
+        , Parser.backtrackable
+            (Parser.succeed MonthDate
+                |= int2
+                |= Parser.oneOf
+                    [ int2
+                    , Parser.succeed 1
                     ]
-            , try <|
-                succeed MonthDate
-                    |= intFixed 2
-                    |= intFixed 2
-            , try <|
-                map OrdinalDate
-                    (intFixed 3)
-            , succeed MonthDate
-                |= intFixed 2
-                |= succeed 1
-            , succeed WeekDate
-                |. keyword "W"
-                |= intFixed 2
-                |= oneOf
-                    [ intFixed 1
-                    , succeed 1
-                    ]
-            , succeed (OrdinalDate 1)
-            ]
+                |> Parser.andThen Parser.commit
+            )
+        , Parser.map OrdinalDate
+            int3
+        , Parser.succeed
+            (OrdinalDate 1)
+        ]
 
 
-try : Parser a -> Parser a
-try p =
-    delayedCommitMap always p (succeed ())
+int4 : Parser Int
+int4 =
+    Parser.succeed ()
+        |. Parser.chompIf Char.isDigit
+        |. Parser.chompIf Char.isDigit
+        |. Parser.chompIf Char.isDigit
+        |. Parser.chompIf Char.isDigit
+        |> Parser.mapChompedString
+            (\str _ -> String.toInt str |> Maybe.withDefault 0)
 
 
-intFixed : Int -> Parser Int
-intFixed width =
-    map
-        (String.toInt >> Result.withDefault 0)
-        (ignore (Exactly width) Char.isDigit
-            |> source
-        )
+int3 : Parser Int
+int3 =
+    Parser.succeed ()
+        |. Parser.chompIf Char.isDigit
+        |. Parser.chompIf Char.isDigit
+        |. Parser.chompIf Char.isDigit
+        |> Parser.mapChompedString
+            (\str _ -> String.toInt str |> Maybe.withDefault 0)
+
+
+int2 : Parser Int
+int2 =
+    Parser.succeed ()
+        |. Parser.chompIf Char.isDigit
+        |. Parser.chompIf Char.isDigit
+        |> Parser.mapChompedString
+            (\str _ -> String.toInt str |> Maybe.withDefault 0)

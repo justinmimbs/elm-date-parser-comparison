@@ -1,8 +1,10 @@
 module Tests exposing (..)
 
+--import Expect exposing (Expectation)
+--import Test exposing (Test, describe, test)
+
 import DateParsers exposing (Date(..), YearDate(..))
-import Expect exposing (Expectation)
-import Test exposing (Test, describe, test)
+import Shim exposing (Expectation, Test, describe, equal, test)
 
 
 test_fromIsoString : Test
@@ -13,8 +15,8 @@ test_fromIsoString =
             let
                 toTest : ( String, Date ) -> Test
                 toTest ( string, expected ) =
-                    test (string ++ " => " ++ toString expected) <|
-                        \() -> fromIsoString string |> Expect.equal (Ok expected)
+                    test (string ++ " => " ++ Debug.toString expected) <|
+                        \() -> fromIsoString string |> equal (Ok expected)
             in
             [ describe "converts ISO 8601 date strings in basic format" <|
                 List.map toTest
@@ -43,7 +45,7 @@ test_fromIsoString =
                     ]
             , describe "returns Err for malformed date strings" <|
                 List.map
-                    (\s -> test s <| \() -> fromIsoString s |> Expect.equal (Err "String is not in IS0 8601 date format"))
+                    (\s -> test s <| \() -> fromIsoString s |> equal (Err "String is not in IS0 8601 date format"))
                     [ "200812-31"
                     , "2008-1231"
                     , "2009W01-4"
@@ -51,10 +53,13 @@ test_fromIsoString =
                     , "2008-012-31"
                     , "2008-12-031"
                     , "2008-0061"
+                    , "2018-05-1"
+                    , "2018-5"
+                    , "20180"
                     ]
             ]
     in
     describe "fromIsoString"
-        [ describe "Regex" <| toSuite DateParsers.fromIsoString_Regex
-        , describe "Parser" <| toSuite DateParsers.fromIsoString_Parser
+        [ describe "Parser" <| toSuite DateParsers.fromIsoString_Parser
+        , describe "Regex" <| toSuite DateParsers.fromIsoString_Regex
         ]
