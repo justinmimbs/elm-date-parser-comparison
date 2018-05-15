@@ -109,6 +109,7 @@ yearDate : Parser YearDate
 yearDate =
     Parser.oneOf
         [ Parser.succeed identity
+            -- extended format
             |. Parser.token "-"
             |= Parser.oneOf
                 [ Parser.backtrackable
@@ -124,7 +125,18 @@ yearDate =
                             |= int2
                         , Parser.succeed 1
                         ]
+                , Parser.succeed WeekDate
+                    |. Parser.token "W"
+                    |= int2
+                    |= Parser.oneOf
+                        [ Parser.succeed identity
+                            |. Parser.token "-"
+                            |= int1
+                        , Parser.succeed 1
+                        ]
                 ]
+
+        -- basic format
         , Parser.backtrackable
             (Parser.succeed MonthDate
                 |= int2
@@ -136,6 +148,13 @@ yearDate =
             )
         , Parser.map OrdinalDate
             int3
+        , Parser.succeed WeekDate
+            |. Parser.token "W"
+            |= int2
+            |= Parser.oneOf
+                [ int1
+                , Parser.succeed 1
+                ]
         , Parser.succeed
             (OrdinalDate 1)
         ]
@@ -167,5 +186,12 @@ int2 =
     Parser.succeed ()
         |. Parser.chompIf Char.isDigit
         |. Parser.chompIf Char.isDigit
+        |> Parser.mapChompedString
+            (\str _ -> String.toInt str |> Maybe.withDefault 0)
+
+
+int1 : Parser Int
+int1 =
+    Parser.chompIf Char.isDigit
         |> Parser.mapChompedString
             (\str _ -> String.toInt str |> Maybe.withDefault 0)
